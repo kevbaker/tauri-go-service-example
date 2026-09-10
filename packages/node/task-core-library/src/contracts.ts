@@ -1,33 +1,40 @@
-export const taskStatuses = ["todo", "in_progress", "done"] as const;
+import type {
+  CreateTaskInput,
+  ListTasksQuery,
+  Task,
+  TaskBridgeRequest,
+  TaskStatus,
+  UpdateTaskInput,
+} from "./generated/task-api";
 
-export type TaskStatus = (typeof taskStatuses)[number];
+export type {
+  ApplicationError,
+  CreateTaskInput,
+  CreateTaskRequest,
+  DeleteTaskRequest,
+  FailedTaskResponse,
+  GetTaskRequest,
+  ListTasksQuery,
+  ListTasksRequest,
+  SuccessfulTaskResponse,
+  Task,
+  TaskBridgeResponse,
+  TaskBridgeRequest,
+  TaskClientErrorCode,
+  TaskIdPayload,
+  TaskStatus,
+  UpdateTaskInput,
+  UpdateTaskPayload,
+  UpdateTaskRequest,
+} from "./generated/task-api";
 
-export interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  status: TaskStatus;
-  createdAt: string;
-  updatedAt: string;
-}
+export type TaskOperation = TaskBridgeRequest["operation"];
 
-export interface ListTasksQuery {
-  status?: TaskStatus;
-  limit?: number;
-  offset?: number;
-}
-
-export interface CreateTaskInput {
-  title: string;
-  description?: string | null;
-  status?: TaskStatus;
-}
-
-export interface UpdateTaskInput {
-  title?: string;
-  description?: string | null;
-  status?: TaskStatus;
-}
+export const taskStatuses = [
+  "todo",
+  "in_progress",
+  "done",
+] as const satisfies readonly TaskStatus[];
 
 export const taskOperations = [
   "tasks.list",
@@ -35,18 +42,9 @@ export const taskOperations = [
   "tasks.create",
   "tasks.update",
   "tasks.delete",
-] as const;
-
-export type TaskOperation = (typeof taskOperations)[number];
+] as const satisfies readonly TaskOperation[];
 
 export const taskProtocolVersion = 1 as const;
-
-export interface TaskBridgeRequest {
-  protocolVersion: typeof taskProtocolVersion;
-  requestId: string;
-  operation: TaskOperation;
-  payload: unknown;
-}
 
 /**
  * The application shell supplies this transport. It may use Tauri IPC, HTTP,

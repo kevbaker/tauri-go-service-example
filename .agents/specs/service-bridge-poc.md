@@ -1,6 +1,6 @@
 # Service Bridge POC Specification
 
-- Status: proposed
+- Status: implemented; cross-platform packaged UI verification remains
 - Owner: TBD
 - Related decision: [ADR 0001](../decisions/0001-electron-style-service-bridge.md)
 
@@ -41,7 +41,7 @@ export interface TaskCoreClient {
 }
 ```
 
-The application passes `DesktopTransport` or `HttpTransport` to `createTaskCoreClient` at composition time. Tests and the current UI preview may inject an in-memory implementation.
+The application passes `DesktopTaskTransport` or `HttpTaskTransport` to `createTaskCoreClient` at composition time. Tests may inject an in-memory implementation or fake transport.
 
 ## Wire envelope
 
@@ -70,7 +70,10 @@ Successful response:
   "data": {
     "id": "01K...",
     "title": "Prove the bridge",
-    "status": "todo"
+    "description": null,
+    "status": "todo",
+    "createdAt": "2026-09-10T12:00:00Z",
+    "updatedAt": "2026-09-10T12:00:00Z"
   }
 }
 ```
@@ -126,9 +129,13 @@ Before binding beyond loopback, remote mode must have:
 - startup output that clearly identifies exposed URLs;
 - a documented warning that it is for development only.
 
+The implemented Vite boundary uses a generated browser-access capability URL. A successful first request sets an HTTP-only, same-site session cookie and redirects to remove the token from the address bar. Requests without that cookie are rejected before Vite serves the application or proxies task operations. The proxy uses a separate token when calling the loopback Go service.
+
 ## Events and streams
 
-Unary asynchronous calls are sufficient for the CRUD proof. The POC may emit a typed `service.statusChanged` Tauri event for `ready`, `unavailable`, and `stopped` states.
+Unary asynchronous calls are sufficient for the CRUD proof. The task page performs a non-overlapping list refresh every five seconds and offers a manual Refresh action. Refresh responses that began before a local mutation are not allowed to overwrite the resulting UI state. This is a pull-based synchronization mechanism, not a backend event stream.
+
+The POC may emit a typed `service.statusChanged` Tauri event for `ready`, `unavailable`, and `stopped` states.
 
 If later work requires progress or high-volume ordered data, add a typed Tauri channel. Do not use global untyped events for request responses.
 

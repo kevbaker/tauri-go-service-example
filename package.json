@@ -7,16 +7,21 @@
     "packages/node/*"
   ],
   "scripts": {
-    "dev:remote": "npm run dev:remote --workspace task-app",
+    "contract:generate": "node scripts/generate-task-contract.mjs",
+    "contract:check": "node scripts/generate-task-contract.mjs --check",
+    "dev:remote": "node scripts/dev-remote.mjs",
     "preview:remote": "npm run preview:remote --workspace task-app",
     "test": "npm run test:frontend && npm run test:packages && npm run test:go && npm run test:rust",
     "test:frontend": "npm run test --workspace task-app",
     "test:packages": "npm run test --workspace @tauri-go-service-example/task-core-library",
     "test:go": "cd services/go/task-service && GOCACHE=/tmp/tauri-go-service-example-go-cache go test ./...",
-    "test:rust": "cargo test --manifest-path apps/task-app/src-tauri/Cargo.toml",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "test:rust": "npm run sidecar:build --workspace task-app && cargo test --manifest-path apps/task-app/src-tauri/Cargo.toml",
+    "typecheck": "npm run contract:check && npm run typecheck --workspaces --if-present"
   },
   "author": "Kevin Baker <kbaker@example.com> (https://example.com/)",
   "license": "UNLICENSED",
-  "description": "Example Tauri desktop app with a React TypeScript frontend, an embedded Go service, and SQLite persistence"
+  "description": "Example Tauri desktop app with a React TypeScript frontend, an embedded Go service, and SQLite persistence",
+  "devDependencies": {
+    "json-schema-to-typescript": "15.0.4"
+  }
 }

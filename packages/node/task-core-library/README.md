@@ -1,6 +1,6 @@
 # Task Core Library
 
-Transport-neutral TypeScript contracts and CRUD client for the task proof of concept.
+Transport-neutral TypeScript contracts and CRUD client for the task proof of concept. Its data-transfer types are generated from the repository's canonical [task JSON Schema](../../../contracts/task-api.schema.json).
 
 The package owns:
 
@@ -23,3 +23,12 @@ await client.tasks.delete(created.id);
 ```
 
 This boundary is also suitable for a future MCP server: MCP tools can translate tool arguments into these task client calls while transport and persistence remain outside the MCP adapter.
+
+After changing the schema, regenerate and verify the committed TypeScript bindings from the repository root:
+
+```bash
+npm run contract:generate
+npm run contract:check
+```
+
+Do not edit files under `src/generated` by hand. Runtime response parsing remains explicit because TypeScript types alone do not validate untrusted process-boundary data.

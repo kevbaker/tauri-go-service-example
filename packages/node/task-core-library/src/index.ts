@@ -11,6 +11,8 @@ export type {
   Task,
   TaskBackendTransport,
   TaskBridgeRequest,
+  TaskBridgeResponse,
+  TaskClientErrorCode,
   TaskCoreClient,
   TaskCrudClient,
   TaskOperation,
@@ -19,6 +21,5 @@ export type {
 } from "./contracts";
 export { TaskClientError } from "./errors";
 export type {
-  TaskClientErrorCode,
   TaskClientErrorOptions,
 } from "./errors";

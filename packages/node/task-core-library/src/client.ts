@@ -7,7 +7,6 @@ import {
   type TaskBackendTransport,
   type TaskBridgeRequest,
   type TaskCoreClient,
-  type TaskOperation,
   type TaskStatus,
   type UpdateTaskInput,
 } from "./contracts";
@@ -135,17 +134,10 @@ export function createTaskCoreClient(
   const createRequestId = options.createRequestId ?? defaultRequestId;
 
   async function invoke<T>(
-    operation: TaskOperation,
-    payload: unknown,
+    request: TaskBridgeRequest,
     parseData: (data: unknown, requestId: string) => T,
   ): Promise<T> {
-    const requestId = createRequestId();
-    const request: TaskBridgeRequest = {
-      protocolVersion: taskProtocolVersion,
-      requestId,
-      operation,
-      payload,
-    };
+    const { requestId } = request;
     let response: unknown;
     try {
       response = await transport.invoke(request);
@@ -163,19 +155,59 @@ export function createTaskCoreClient(
   return {
     tasks: {
       list(query: ListTasksQuery = {}) {
-        return invoke("tasks.list", query, parseTaskList);
+        return invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "tasks.list",
+            payload: query,
+          },
+          parseTaskList,
+        );
       },
       get(id: string) {
-        return invoke("tasks.get", { id }, parseTask);
+        return invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "tasks.get",
+            payload: { id },
+          },
+          parseTask,
+        );
       },
       create(input: CreateTaskInput) {
-        return invoke("tasks.create", input, parseTask);
+        return invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "tasks.create",
+            payload: input,
+          },
+          parseTask,
+        );
       },
       update(id: string, input: UpdateTaskInput) {
-        return invoke("tasks.update", { id, input }, parseTask);
+        return invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "tasks.update",
+            payload: { id, input },
+          },
+          parseTask,
+        );
       },
       async delete(id: string) {
-        await invoke("tasks.delete", { id }, () => undefined);
+        await invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "tasks.delete",
+            payload: { id },
+          },
+          () => undefined,
+        );
       },
     },
   };

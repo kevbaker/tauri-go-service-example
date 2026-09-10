@@ -43,10 +43,10 @@ For this project, the central proposition is:
                          resources, and prompts
 ```
 
-An optional MCP server adapter can face the other direction:
+An MCP server adapter can face the other direction:
 
 ```text
-AI host -> MCP server adapter -> core client -> Go service -> SQLite/integrations
+AI host -> stdio MCP adapter -> Go task service -> SQLite/integrations
 ```
 
 MCP stays at an edge in both cases. It does not become the internal domain model, UI API, persistence layer, or desktop IPC protocol.
@@ -67,6 +67,53 @@ Our Tauri architecture deliberately mirrors that shape:
 | Electron IPC payloads | Versioned JSON envelopes | Serializable DTOs and explicit errors |
 
 That similarity matters for migration. Existing React components, TypeScript contracts, validation behavior, and frontend tests can move first. Electron preload methods can be reimplemented behind the core library one capability at a time. Node-specific main-process logic can then move behind the same interface into Go or narrowly scoped Rust commands.
+
+### The implemented interface
+
+React receives only the domain-shaped client:
+
+```ts
+client.tasks.list();
+client.tasks.get(taskId);
+client.tasks.create({ title: "Persist this task" });
+client.tasks.update(taskId, { status: "done" });
+client.tasks.delete(taskId);
+```
+
+Those methods build the versioned JSON envelope. The desktop adapter maps every envelope to one private Tauri invocation:
+
+```ts
+invoke("service_invoke", { request });
+```
+
+This is deliberately analogous to an Electron preload implementation calling `ipcRenderer.invoke("service:invoke", request)`. Neither React nor the task-core package receives the general Tauri `invoke` function. The adapter is the only frontend module that imports it.
+
+On the privileged side, Rust implements the role normally held by `ipcMain.handle`. It:
+
+1. accepts only protocol version 1 and the five `tasks.*` operations;
+2. rejects oversized requests;
+3. lazily starts the bundled target-specific Go binary;
+4. gives that child a random per-launch token and an application-data SQLite path;
+5. accepts readiness only from a loopback address using the expected protocol;
+6. forwards the envelope to the fixed `/v1/invoke` endpoint with a timeout;
+7. checks response size, JSON shape, protocol version, and request ID;
+8. requests graceful shutdown and terminates the child when Tauri exits.
+
+The browser adapter sends the identical envelope to `/task-service/v1/invoke`. In remote development, Vite first authenticates the browser through a generated capability URL and HTTP-only same-site cookie. It then proxies that relative route to the loopback Go server and adds a separate short-lived service token on the server side. The browser and an attached phone never receive the service token or the Go listener address.
+
+The task screen pulls the authoritative list every five seconds and on an explicit Refresh action. Polls do not overlap, and a response that started before a local mutation cannot overwrite that mutation's UI result. This deliberately small synchronization mechanism can later be replaced by an event-driven invalidation channel without changing the task CRUD contract.
+
+```text
+Desktop
+React -> TaskCoreClient -> DesktopTaskTransport -> service_invoke
+      -> Rust-owned Go sidecar -> Go dispatcher -> SQLite
+
+Remote development
+React -> TaskCoreClient -> HttpTaskTransport -> Vite development proxy
+      -> loopback Go service -> Go dispatcher -> SQLite
+```
+
+Both paths therefore reuse the same TypeScript request construction, Go validation, domain service, migrations, and repository. Only envelope delivery changes.
 
 This supports a gradual migration instead of a flag-day rewrite:
 
@@ -180,15 +227,16 @@ This lets the application change MCP SDKs, transports, or servers without rewrit
 
 ### Exposing application capabilities through MCP
 
-If an AI host needs to operate the task service, a separate MCP server adapter can translate MCP tool arguments into core-client calls:
+If an AI host needs to operate the task service, a separate MCP server command translates model-facing tool arguments into calls on the same Go application service used by the HTTP bridge:
 
 ```text
 MCP tool `tasks_create`
         -> validate MCP input
-        -> coreClient.tasks.create(...)
-        -> selected backend transport
         -> Go domain service
+        -> SQLite repository
 ```
+
+The current `task-mcp` executable uses this direct Go composition because it is a local stdio process and the Go service is the canonical owner of domain rules. A future remote MCP gateway may instead use the TypeScript core client and an authenticated backend transport. Both shapes keep MCP at the edge; neither duplicates task behavior in the adapter.
 
 MCP tools define JSON Schema inputs and may define structured output schemas, which aligns well with our schema-validated application contract. See the MCP specification for [tools and schemas](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 
@@ -235,15 +283,16 @@ The architecture earns its keep when we can demonstrate all of the following:
 
 ## Current implementation boundary
 
-Today, the transport-neutral task core library, responsive in-memory UI, authenticated Go HTTP bridge, structured Go logging, configuration loading, SQLite repository, and migrations exist and are tested independently.
+Today, the transport-neutral task core library, responsive Go-backed UI, desktop and browser transports, Tauri sidecar lifecycle and proxy, authenticated Go HTTP bridge, structured Go logging, configuration loading, SQLite repository, migrations, target-aware sidecar build, and local Go stdio MCP adapter are implemented.
 
-The Tauri sidecar lifecycle, Rust `service_invoke` proxy, desktop and browser production transports, MCP adapters, packaged sidecar, and cross-transport end-to-end tests remain planned. This document pitches the architecture being built; it does not claim that those remaining pieces are already implemented or verified.
+TypeScript adapter tests, Rust boundary tests, Go HTTP integration tests, and SQLite restart tests cover the major seams. Automated packaged-application UI tests on every desktop target, full cross-transport fixture parity, frontend log forwarding, sidecar crash notification, and remote or TypeScript-hosted MCP adapters remain future work. Cross-platform bundling is configured but must still be demonstrated by the CI matrix before it is considered verified.
 
 ## Related project documents
 
-- [Root project README](../README.md)
-- [ADR 0001: Electron-style typed service bridge](../.agents/decisions/0001-electron-style-service-bridge.md)
-- [Service bridge POC specification](../.agents/specs/service-bridge-poc.md)
-- [Tauri application patterns](../.agents/patterns/tauri.md)
-- [TypeScript and React patterns](../.agents/patterns/typescript-react.md)
-- [Task core library](../packages/node/task-core-library/README.md)
+- [Root project README](README.md)
+- [MCP usage guide](MCP-USAGE.md)
+- [ADR 0001: Electron-style typed service bridge](.agents/decisions/0001-electron-style-service-bridge.md)
+- [Service bridge POC specification](.agents/specs/service-bridge-poc.md)
+- [Tauri application patterns](.agents/patterns/tauri.md)
+- [TypeScript and React patterns](.agents/patterns/typescript-react.md)
+- [Task core library](packages/node/task-core-library/README.md)

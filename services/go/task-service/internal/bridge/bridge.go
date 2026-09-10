@@ -205,7 +205,22 @@ func validateEnvelope(request Request) map[string]string {
 	if request.Operation == "" {
 		fields["operation"] = "Operation is required"
 	}
+	if isTaskOperation(request.Operation) {
+		payload := bytes.TrimSpace(request.Payload)
+		if len(payload) == 0 || bytes.Equal(payload, []byte("null")) {
+			fields["payload"] = "Payload is required"
+		}
+	}
 	return fields
+}
+
+func isTaskOperation(operation string) bool {
+	switch operation {
+	case OperationTasksList, OperationTasksGet, OperationTasksCreate, OperationTasksUpdate, OperationTasksDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func decodePayload(raw json.RawMessage, target any) error {

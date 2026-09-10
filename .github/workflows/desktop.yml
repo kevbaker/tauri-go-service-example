@@ -1,0 +1,188 @@
+name: Desktop CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Detect version change
+    runs-on: ubuntu-22.04
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Compare package versions
+        id: version
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          previous_version="$version"
+          changed=false
+
+          if [[ "$EVENT_NAME" == "push" ]] && git cat-file -e "${BEFORE_SHA}:package.json" 2>/dev/null; then
+            previous_version="$(git show "${BEFORE_SHA}:package.json" | node -e "let input = ''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(input).version));")"
+            if [[ "$version" != "$previous_version" ]]; then
+              changed=true
+            fi
+          fi
+
+          if [[ "$changed" == "true" ]] && git rev-parse --verify --quiet "refs/tags/v${version}" >/dev/null; then
+            tagged_sha="$(git rev-list -n 1 "v${version}")"
+            if [[ "$tagged_sha" != "$CURRENT_SHA" ]]; then
+              echo "Version v${version} already belongs to commit ${tagged_sha}." >&2
+              exit 1
+            fi
+          fi
+
+          echo "Current version: $version"
+          echo "Previous version: $previous_version"
+          echo "Version changed: $changed"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: services/go/task-service/go.sum
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Vet Go
+        working-directory: services/go/task-service
+        run: go vet ./...
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path apps/task-app/src-tauri/Cargo.toml -- --check
+
+      - name: Lint Rust
+        run: cargo clippy --manifest-path apps/task-app/src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Build frontend
+        run: npm run build --workspace task-app
+
+  build-desktop:
+    name: Build (${{ matrix.platform }})
+    needs:
+      - validate
+      - version
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ubuntu-22.04
+          - macos-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: services/go/task-service/go.sum
+
+      - name: Install Linux desktop dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build Tauri desktop bundle
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/task-app
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: task-app-[platform]-[arch]-[bundle]
+          tagName: ${{ needs.version.outputs.changed == 'true' && format('v{0}', needs.version.outputs.version) || '' }}
+          releaseName: ${{ needs.version.outputs.changed == 'true' && format('Task App v{0}', needs.version.outputs.version) || '' }}
+          releaseCommitish: ${{ github.sha }}
+          generateReleaseNotes: true
+          releaseDraft: false
+          prerelease: ${{ contains(needs.version.outputs.version, '-') }}

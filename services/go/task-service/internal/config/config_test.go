@@ -150,3 +150,39 @@ func TestCheckedInConfigurationsLoad(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadMCPUsesSharedSourcesWithoutRequiringNetworkConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	contents := []byte(`
+app:
+  environment: development
+  logLevel: info
+database:
+  path: from-file.db
+server:
+  mode: remote
+  host: invalid-for-http
+  port: 0
+  allowedOrigins: []
+  requestTimeout: invalid
+  shutdownTimeout: invalid
+ui:
+  appName: Tasks
+  pageSize: 25
+`)
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := map[string]string{"TGS_DATABASE_PATH": "from-environment.db"}
+	overrideLevel := "debug"
+	configuration, err := LoadMCP(path, func(key string) (string, bool) {
+		value, ok := environment[key]
+		return value, ok
+	}, MCPOverrides{LogLevel: &overrideLevel})
+	if err != nil {
+		t.Fatalf("LoadMCP() error = %v", err)
+	}
+	if configuration.Database.Path != "from-environment.db" || configuration.App.LogLevel != "debug" {
+		t.Fatalf("LoadMCP() = %#v", configuration)
+	}
+}

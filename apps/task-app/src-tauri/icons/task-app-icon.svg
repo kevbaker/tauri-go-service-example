@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Task App icon</title>
+  <desc id="description">A white checklist on a blue rounded square.</desc>
+  <defs>
+    <linearGradient id="background" x1="160" y1="96" x2="864" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2388ff"/>
+      <stop offset="1" stop-color="#0759d6"/>
+    </linearGradient>
+    <filter id="shadow" x="180" y="150" width="664" height="740" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="24" flood-color="#062c69" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#background)"/>
+  <path d="M160 400C160 224 304 112 480 112h304c71 0 128 57 128 128v80C711 294 465 343 160 517V400Z" fill="#fff" opacity="0.08"/>
+  <g filter="url(#shadow)">
+    <rect x="248" y="238" width="528" height="616" rx="92" fill="#fff"/>
+    <rect x="382" y="170" width="260" height="142" rx="62" fill="#142033"/>
+    <rect x="430" y="207" width="164" height="52" rx="26" fill="#fff" opacity="0.95"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m334 443 28 29 54-66" stroke="#0b6ef3" stroke-width="34"/>
+    <path d="M477 441h190" stroke="#142033" stroke-width="34"/>
+    <path d="m334 605 28 29 54-66" stroke="#0b6ef3" stroke-width="34"/>
+    <path d="M477 603h190" stroke="#142033" stroke-width="34"/>
+    <path d="m334 767 28 29 54-66" stroke="#0b6ef3" stroke-width="34"/>
+    <path d="M477 765h142" stroke="#142033" stroke-width="34"/>
+  </g>
+</svg>

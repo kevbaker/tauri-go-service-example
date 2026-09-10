@@ -4,23 +4,25 @@ A small reference desktop application that demonstrates how to combine a React a
 
 The communication layer is intentionally modeled after Electron's context-isolated preload pattern: frontend code calls a narrow typed application API without knowing whether the implementation is running through desktop IPC or over HTTP in remote development mode. The concrete bridge design is recorded in [ADR 0001](.agents/decisions/0001-electron-style-service-bridge.md), with executable acceptance criteria in the [service bridge POC specification](.agents/specs/service-bridge-poc.md).
 
-> **Project status:** this is an executable scaffold, not yet the completed service-bridge POC. The reusable `TaskCoreClient` package and React/Vaadin task UI are implemented, but the UI currently uses an in-memory adapter and resets on reload. The standalone Go service implements authenticated HTTP task CRUD and SQLite persistence. The Rust sidecar lifecycle, desktop IPC adapter, browser HTTP adapter, and frontend-to-Go integration are still pending.
+> **Project status:** the primary service-bridge POC is implemented. The React/Vaadin UI calls the reusable `TaskCoreClient`; desktop mode uses a narrow Tauri command to manage and proxy to a bundled Go sidecar, while remote development uses an authenticated Vite-to-Go proxy. Go owns full task CRUD and SQLite persistence. Cross-platform packaged bundles and browser-driven end-to-end tests still require CI verification.
 
 ## What works today
 
 | Capability | Status | Notes |
 | --- | --- | --- |
 | React, TypeScript, and Vite application | Implemented | Runs in a browser and in the generated Tauri shell |
-| Responsive Vaadin task CRUD UI | Implemented | Uses an in-memory client; data resets when the page reloads |
-| Shared task core library | Implemented and unit tested | Owns task DTOs, five CRUD methods, bridge requests, response validation, and normalized errors; production transports and generated contract types are pending |
+| Responsive Vaadin task CRUD UI | Implemented | Uses the Go service, persists through SQLite, and refreshes backend changes manually or every five seconds |
+| Shared task core library | Implemented and unit tested | Owns generated task DTOs, five CRUD methods, bridge requests, response validation, and normalized errors |
+| Canonical task API contract | Implemented and contract tested | Draft 2020-12 JSON Schema generates TypeScript DTOs and validates Go wire representations |
 | Go task domain and CRUD service | Implemented and unit tested | Includes validation, stable application errors, filtering, and pagination |
 | SQLite repository and migrations | Implemented and tested | Applies embedded migrations and persists across service restarts |
 | Authenticated Go HTTP bridge | Implemented and tested | Provides health, invoke, and graceful-shutdown endpoints |
 | Central Go configuration | Implemented and tested | Supports defaults, YAML, `TGS_` environment values, CLI overrides, and a public allowlist |
 | Structured Go logging and readiness output | Implemented and tested | Logs go to stderr; the machine-readable readiness record goes to stdout |
-| Tauri-to-Go sidecar lifecycle and IPC proxy | Planned | Rust still contains the generated example command |
-| Go-backed browser transport | Planned | `dev:remote` currently serves only the in-memory UI |
-| Packaged Go sidecar and end-to-end parity tests | Planned | Required before the POC is complete |
+| MCP task server | Implemented and protocol tested | A separate Go stdio command exposes five task tools through the same Go domain service and SQLite repository |
+| Tauri-to-Go sidecar lifecycle and IPC proxy | Implemented and unit tested | Rust allowlists task operations, owns the token/address, validates readiness, bounds response buffering, and waits for graceful shutdown before forcing termination |
+| Go-backed browser transport | Implemented and unit tested | `dev:remote` starts Go and Vite; Vite authenticates the browser session and keeps the Go token out of browser JavaScript |
+| Target-specific Go sidecar packaging | Configured | Local target build works; the full Linux/macOS/Windows CI matrix remains unverified |
 
 ## Goals
 
@@ -61,7 +63,7 @@ This domain is intentionally ordinary. It is large enough to exercise validation
 | Design system | [Vaadin Web Components](https://vaadin.com/docs/latest/components) with official React wrappers | Open-source controls, accessible form behavior, Lumo design tokens, and webview/browser portability |
 | Backend | Go | Simple deployment, concurrency, and a single sidecar binary |
 | Persistence | SQLite | Local, durable storage with no external database dependency |
-| API contract | Shared JSON Schema or OpenAPI-generated TypeScript and Go types | Keeps requests, responses, and validation aligned |
+| API contract | JSON Schema Draft 2020-12 | Generates TypeScript DTOs and validates the idiomatic Go wire representation without losing missing-versus-null semantics |
 | Logging | Structured JSON with request/correlation IDs | Makes events traceable across process boundaries |
 
 ## Prerequisites
@@ -80,31 +82,25 @@ npm install
 
 ### Browser UI
 
-Start the current in-memory UI from the repository root:
-
-```bash
-npm run dev --workspace task-app
-```
-
-Vite serves the application at `http://localhost:1420`. This exercises the responsive task UI and typed client boundary, but it does not start or call the Go service. Task data is intentionally reset on reload.
-
-To opt into a network-accessible Vite server for testing from another device:
+For the complete browser-to-Go development stack, run from the repository root:
 
 ```bash
 npm run dev:remote
 ```
 
-This binds Vite to all local interfaces. Use it only on a trusted network. The Go service still needs to be started separately, and the UI remains on its in-memory client until `HttpTransport` is implemented.
+This generates separate short-lived service and browser-access tokens, starts Go on loopback using `config/development.yaml`, and starts Vite on all local interfaces. Append the printed `?access_token=...` value to a Vite Network URL the first time it is opened. Vite exchanges that capability URL for an HTTP-only, same-site session cookie before serving the application. It then proxies `/task-service/*` to Go and adds the separate Go token server-side. Task CRUD persists to `services/go/task-service/data/tasks.db`. Stop both processes with Ctrl+C, and do not expose this development server to an untrusted or public network.
+
+Running `npm run dev --workspace task-app` alone starts only Vite and will display a service-unavailable error because no authenticated Go proxy is present.
 
 ### Tauri shell
 
-Run the generated desktop shell with:
+Run the desktop application with:
 
 ```bash
 npm run tauri --workspace task-app -- dev
 ```
 
-The shell displays the same in-memory UI. It does not yet build, launch, authenticate, or stop the Go sidecar; the Rust core still exposes only the generated example command.
+The Tauri pre-development step builds the current platform's Go sidecar. On the first task request, Rust starts it with a per-launch token and an application-data SQLite path, validates its readiness message, and proxies the typed request. Closing Tauri requests graceful shutdown and terminates the child if needed.
 
 ### Standalone Go service
 
@@ -124,7 +120,27 @@ TGS_REMOTE_ACCESS_TOKEN="development-only-secret" \
   go run ./cmd/task-service --config ../../../config/development.yaml
 ```
 
-This listens on `127.0.0.1:8787` by default. Binding beyond loopback requires an explicit host override and a matching origin allowlist. Remote mode is development-only and is not currently connected to the browser UI.
+This listens on `127.0.0.1:8787` by default. Binding beyond loopback requires an explicit host override and a matching origin allowlist. The root `npm run dev:remote` command handles the access token and connects this service to the browser through Vite's development proxy.
+
+### MCP task server
+
+See [Using the Task App MCP Server](MCP-USAGE.md) for host configuration, tool inputs, Inspector usage, persistence behavior, and troubleshooting.
+
+Run the stdio MCP server from `services/go/task-service`:
+
+```bash
+go run ./cmd/task-mcp --database-path ./data/tasks.db
+```
+
+The MCP host owns the process and communicates over stdin/stdout. All logs go to stderr so they cannot corrupt MCP protocol messages. The server exposes `tasks_list`, `tasks_get`, `tasks_create`, `tasks_update`, and `tasks_delete`; delete is marked destructive and its description requires explicit user confirmation.
+
+For durable host configuration, build the executable and point the host at the resulting absolute path:
+
+```bash
+go build -o /absolute/path/to/task-mcp ./cmd/task-mcp
+```
+
+The command reads the shared YAML configuration with `--config`, honors `TGS_DATABASE_PATH` and `TGS_APP_LOG_LEVEL`, and accepts `--database-path` and `--log-level` as highest-precedence overrides. It opens SQLite directly, so use it as an alternative task-service process for that database rather than running it alongside another writer.
 
 ## Validate the scaffold
 
@@ -136,12 +152,18 @@ npm run typecheck
 npm run build --workspace task-app
 ```
 
+`npm run typecheck` also checks that the committed TypeScript task bindings match `contracts/task-api.schema.json`. After intentionally changing that schema, run `npm run contract:generate`.
+
 The root test command runs the frontend tests, Go tests, and Rust tests. Additional Go checks can be run from `services/go/task-service`:
 
 ```bash
 go vet ./...
 go test -race ./...
 ```
+
+## Desktop builds and releases
+
+Merges to `main` run the desktop workflow and produce unsigned Linux, macOS, and Windows bundles as GitHub Actions artifacts. The root `package.json` is the canonical desktop version: when its `version` changes in a merge to `main`, the same workflow also creates the matching `v<version>` GitHub Release and uploads the bundles. A manually dispatched build does not create a release.
 
 ## Target architecture
 
@@ -204,6 +226,10 @@ Requests and responses will use the same versioned JSON envelope in both modes. 
 │   ├── schema.json           # Canonical configuration schema
 │   ├── default.yaml          # Shared non-secret defaults
 │   └── development.yaml      # Development overrides
+├── contracts/
+│   └── task-api.schema.json  # Canonical task request and response contract
+├── scripts/
+│   └── generate-task-contract.mjs
 ├── AGENTS.md                 # Repository-wide working agreement
 └── README.md
 ```
@@ -302,25 +328,25 @@ The Go service currently emits structured events. The completed application will
 
 Desktop mode starts Vite, launches the Tauri application, and lets Rust manage the Go sidecar. Go binds to an operating-system-assigned loopback port and requires a per-launch bearer token known only to Rust. Rust waits for a structured readiness message before accepting calls. Closing the desktop application also stops its child service.
 
-The eventual desktop flow is launched with:
+Launch the desktop flow with:
 
 ```bash
 npm run tauri --workspace task-app -- dev
 ```
 
-Today this launches the generated Tauri shell and in-memory UI only. Rust does not yet manage the Go process or proxy service calls.
+The Tauri build hook creates the correctly named Go sidecar for the current Rust target. Rust keeps the listener address, access token, and database path outside the webview.
 
 ### Remote web mode
 
 Remote mode starts the Go HTTP server and Vite development server so the UI can be opened from another device on the local network.
 
-The intended command is:
+Run both services with:
 
 ```bash
 npm run dev:remote
 ```
 
-At the current stage, this command still starts only the React UI; it has not yet been wired to launch the implemented Go HTTP service. Tauri commands are not available in an ordinary browser; browser service calls will use the planned `HttpTransport`.
+This command generates an ephemeral development token, starts Go on loopback, waits for readiness, and then exposes Vite to the local network. The browser uses `HttpTaskTransport`; Vite injects authentication while proxying to Go.
 
 Remote mode must:
 
@@ -347,7 +373,7 @@ The current Go service:
 - use parameterized queries;
 - persist task records at the configured database path.
 
-Development may use `./data/tasks.db`, which remains outside version control. Resolving the platform-appropriate application data directory is part of the future packaged-sidecar integration.
+Remote development uses `services/go/task-service/data/tasks.db`, which remains outside version control. Desktop mode resolves the platform-appropriate Tauri application data directory and stores `tasks.db` there.
 
 ## Security boundaries
 
@@ -362,7 +388,7 @@ Development may use `./data/tasks.db`, which remains outside version control. Re
 
 - **Go unit tests:** domain validation, service behavior, configuration, and error mapping.
 - **Repository tests:** SQLite queries and migrations against temporary databases.
-- **Contract tests:** generated TypeScript and Go models plus equivalent IPC/HTTP behavior.
+- **Contract tests:** generated TypeScript DTO drift, runtime enum parity, Go wire-schema compatibility, and equivalent IPC/HTTP behavior.
 - **React tests:** task flows, validation messages, loading states, and responsive variants.
 - **End-to-end tests:** create, edit, complete, reload, and delete a task in desktop and remote modes.
 
@@ -371,13 +397,13 @@ The minimum acceptance flow is: create a task, restart the application, confirm 
 ## Initial implementation milestones
 
 1. Scaffold the React/Vite frontend, Tauri shell, and Go service. (Complete)
-2. Define configuration and task API schemas, then generate shared types. (Configuration schema complete; API schema and generated bindings remain)
+2. Define configuration and task API schemas, then generate or validate language bindings. (Complete for configuration and the task API)
 3. Implement SQLite migrations and task CRUD in Go. (Complete)
-4. Add the production desktop IPC adapter and connect it to the typed frontend client.
-5. Replace the in-memory Vaadin task UI adapter with the real typed desktop and HTTP transports.
+4. Add the production desktop IPC adapter and connect it to the typed frontend client. (Complete)
+5. Replace the in-memory Vaadin task UI adapter with the real typed desktop and HTTP transports. (Complete)
 6. Add structured logging and correlation IDs.
-7. Add secure remote development mode and responsive validation.
-8. Package the Go sidecar with the desktop application and add end-to-end tests.
+7. Add secure remote development mode and responsive validation. (Complete for the trusted-network POC)
+8. Package the Go sidecar with the desktop application and add end-to-end tests. (Packaging configured; cross-platform UI automation remains)
 
 ## Non-goals
 

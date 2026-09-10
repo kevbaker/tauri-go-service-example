@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kbaker/tauri-go-service-example/contracts/task-api.schema.json",
+  "title": "Task API contract",
+  "description": "Canonical JSON wire contract for task requests and responses.",
+  "oneOf": [
+    { "$ref": "#/$defs/TaskBridgeRequest" },
+    { "$ref": "#/$defs/TaskBridgeResponse" }
+  ],
+  "$defs": {
+    "TaskStatus": {
+      "type": "string",
+      "enum": ["todo", "in_progress", "done"]
+    },
+    "Task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "description",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": {
+          "type": ["string", "null"],
+          "maxLength": 4000
+        },
+        "status": { "$ref": "#/$defs/TaskStatus" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ListTasksQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/TaskStatus" },
+        "limit": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "offset": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "CreateTaskInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": {
+          "type": ["string", "null"],
+          "maxLength": 4000
+        },
+        "status": { "$ref": "#/$defs/TaskStatus" }
+      }
+    },
+    "UpdateTaskInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": {
+          "type": ["string", "null"],
+          "maxLength": 4000
+        },
+        "status": { "$ref": "#/$defs/TaskStatus" }
+      }
+    },
+    "TaskIdPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "UpdateTaskPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "input"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "input": { "$ref": "#/$defs/UpdateTaskInput" }
+      }
+    },
+    "TaskOperation": {
+      "type": "string",
+      "enum": [
+        "tasks.list",
+        "tasks.get",
+        "tasks.create",
+        "tasks.update",
+        "tasks.delete"
+      ]
+    },
+    "TaskRequestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "$ref": "#/$defs/TaskOperation" },
+        "payload": true
+      }
+    },
+    "ListTasksRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "const": "tasks.list" },
+        "payload": { "$ref": "#/$defs/ListTasksQuery" }
+      }
+    },
+    "GetTaskRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "const": "tasks.get" },
+        "payload": { "$ref": "#/$defs/TaskIdPayload" }
+      }
+    },
+    "CreateTaskRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "const": "tasks.create" },
+        "payload": { "$ref": "#/$defs/CreateTaskInput" }
+      }
+    },
+    "UpdateTaskRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "const": "tasks.update" },
+        "payload": { "$ref": "#/$defs/UpdateTaskPayload" }
+      }
+    },
+    "DeleteTaskRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "operation", "payload"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "operation": { "const": "tasks.delete" },
+        "payload": { "$ref": "#/$defs/TaskIdPayload" }
+      }
+    },
+    "TaskBridgeRequest": {
+      "oneOf": [
+        { "$ref": "#/$defs/ListTasksRequest" },
+        { "$ref": "#/$defs/GetTaskRequest" },
+        { "$ref": "#/$defs/CreateTaskRequest" },
+        { "$ref": "#/$defs/UpdateTaskRequest" },
+        { "$ref": "#/$defs/DeleteTaskRequest" }
+      ]
+    },
+    "TaskClientErrorCode": {
+      "type": "string",
+      "enum": [
+        "VALIDATION",
+        "NOT_FOUND",
+        "CONFLICT",
+        "INTERNAL",
+        "SERVICE_UNAVAILABLE",
+        "PROTOCOL_ERROR"
+      ]
+    },
+    "ApplicationError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "$ref": "#/$defs/TaskClientErrorCode" },
+        "message": { "type": "string" },
+        "fieldErrors": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "SuccessfulTaskResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "ok", "data"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": { "type": "string" },
+        "ok": { "const": true },
+        "data": {
+          "oneOf": [
+            { "$ref": "#/$defs/Task" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Task" }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          ]
+        }
+      }
+    },
+    "FailedTaskResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocolVersion", "requestId", "ok", "error"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "requestId": { "type": "string" },
+        "ok": { "const": false },
+        "error": { "$ref": "#/$defs/ApplicationError" }
+      }
+    },
+    "TaskBridgeResponse": {
+      "oneOf": [
+        { "$ref": "#/$defs/SuccessfulTaskResponse" },
+        { "$ref": "#/$defs/FailedTaskResponse" }
+      ]
+    }
+  }
+}

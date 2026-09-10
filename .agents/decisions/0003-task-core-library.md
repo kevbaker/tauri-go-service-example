@@ -25,12 +25,12 @@ The package accepts a narrow `TaskBackendTransport`. Applications provide Tauri 
 
 The React app imports its task contracts from this package. Its temporary in-memory client implements the same `TaskCoreClient` for UI development; production adapters will use `createTaskCoreClient(transport)`.
 
-A future MCP server may depend on this package and map MCP tools to the same task client methods. MCP will be an adapter at the edge and will not own task validation or persistence.
+A remote or TypeScript-hosted MCP server may depend on this package and map MCP tools to the same task client methods. The local Go MCP composition is decided separately in [ADR 0005](0005-go-stdio-mcp-server.md). MCP remains an adapter at the edge and does not own task validation or persistence.
 
 ## Consequences
 
-- UI, desktop, HTTP, tests, and a future MCP adapter can share one TypeScript task API.
+- UI, desktop, HTTP, tests, and future TypeScript-hosted adapters can share one TypeScript task API.
 - Transport implementations deal with one generic invocation primitive while consumers receive domain-named methods.
 - Runtime responses are checked before untrusted backend data reaches consumers.
-- The manually maintained TypeScript and Go contract still needs a canonical schema or generated compatibility tests before the POC is complete.
+- The canonical schema, generated TypeScript DTOs, and Go compatibility tests are defined by [ADR 0004](0004-json-schema-task-contract.md).
 - This package is private and source-consumed inside the monorepo; publishing and a compiled distribution format are deferred until there is a real external consumer.

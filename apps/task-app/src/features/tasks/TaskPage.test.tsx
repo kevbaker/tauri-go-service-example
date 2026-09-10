@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -140,6 +140,42 @@ describe("TaskPage", () => {
     expect(within(summary).getByText("Total").previousElementSibling).toHaveTextContent("1");
     expect(within(summary).getByText("Open").previousElementSibling).toHaveTextContent("1");
     expect(within(summary).getByText("Done").previousElementSibling).toHaveTextContent("0");
+  });
+
+  it("refreshes on demand and polls for backend task changes", async () => {
+    const changedTask = { ...task, id: "task-2", title: "Created elsewhere" };
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce([task])
+      .mockResolvedValue([changedTask, task]);
+    const client = fakeClient({ list });
+    let poll: (() => void) | undefined;
+    const setInterval = vi
+      .spyOn(window, "setInterval")
+      .mockImplementation((handler: TimerHandler, timeout?: number) => {
+        if (timeout === 5_000) poll = handler as () => void;
+        return 1;
+      });
+    const clearInterval = vi.spyOn(window, "clearInterval").mockImplementation(() => {});
+
+    const { unmount } = render(<TaskPage client={client} />);
+    await screen.findByText(task.title);
+
+    await userEvent.click(screen.getByText("Refresh"));
+    expect(await screen.findByText(changedTask.title)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Refresh")).toBeEnabled());
+
+    const runPoll = poll;
+    if (!runPoll) throw new Error("Task polling interval was not registered");
+    await act(async () => {
+      runPoll();
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+
+    unmount();
+    expect(clearInterval).toHaveBeenCalledWith(1);
+    setInterval.mockRestore();
+    clearInterval.mockRestore();
   });
 
   it("creates a task with values from the form", async () => {

@@ -208,10 +208,20 @@ h3 {
   margin-bottom: var(--lumo-space-m);
 }
 
-.list-heading > span {
+.list-heading__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lumo-space-xs);
+}
+
+.list-heading__actions > span {
   flex: none;
   color: var(--lumo-secondary-text-color);
   font-size: var(--lumo-font-size-s);
+}
+
+.list-heading__actions vaadin-button {
+  margin: 0;
 }
 
 .task-list {

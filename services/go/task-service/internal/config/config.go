@@ -63,6 +63,16 @@ type Overrides struct {
 	Token        *string
 }
 
+type MCPConfig struct {
+	App      AppConfig
+	Database DatabaseConfig
+}
+
+type MCPOverrides struct {
+	DatabasePath *string
+	LogLevel     *string
+}
+
 func Defaults() Config {
 	return Config{
 		App:      AppConfig{Environment: "production", LogLevel: "info"},
@@ -81,21 +91,8 @@ func Defaults() Config {
 
 func Load(path string, lookupEnv func(string) (string, bool), overrides Overrides) (Config, error) {
 	configuration := Defaults()
-	if path != "" {
-		file, err := os.Open(path)
-		if err != nil {
-			return Config{}, fmt.Errorf("open config file: %w", err)
-		}
-		defer file.Close()
-		decoder := yaml.NewDecoder(io.LimitReader(file, 1<<20))
-		decoder.KnownFields(true)
-		if err := decoder.Decode(&configuration); err != nil {
-			return Config{}, fmt.Errorf("decode config file: %w", err)
-		}
-		var extra any
-		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-			return Config{}, errors.New("decode config file: expected one YAML document")
-		}
+	if err := loadFile(path, &configuration); err != nil {
+		return Config{}, err
 	}
 	if lookupEnv == nil {
 		lookupEnv = os.LookupEnv
@@ -115,6 +112,66 @@ func Load(path string, lookupEnv func(string) (string, bool), overrides Override
 		return Config{}, err
 	}
 	return configuration, nil
+}
+
+// LoadMCP reads the shared configuration source but validates only the values
+// used by the stdio MCP process. Network listener settings and access tokens do
+// not apply to a server whose lifecycle and access are owned by its MCP host.
+func LoadMCP(path string, lookupEnv func(string) (string, bool), overrides MCPOverrides) (MCPConfig, error) {
+	configuration := Defaults()
+	if err := loadFile(path, &configuration); err != nil {
+		return MCPConfig{}, err
+	}
+	if lookupEnv == nil {
+		lookupEnv = os.LookupEnv
+	}
+	if value, ok := lookupEnv("TGS_APP_LOG_LEVEL"); ok {
+		configuration.App.LogLevel = value
+	}
+	if value, ok := lookupEnv("TGS_DATABASE_PATH"); ok {
+		configuration.Database.Path = value
+	}
+	if overrides.LogLevel != nil {
+		configuration.App.LogLevel = *overrides.LogLevel
+	}
+	if overrides.DatabasePath != nil {
+		configuration.Database.Path = *overrides.DatabasePath
+	}
+
+	fields := make([]string, 0)
+	switch configuration.App.LogLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		fields = append(fields, "app.logLevel must be debug, info, warn, or error")
+	}
+	if strings.TrimSpace(configuration.Database.Path) == "" {
+		fields = append(fields, "database.path is required")
+	}
+	if len(fields) > 0 {
+		return MCPConfig{}, fmt.Errorf("invalid MCP configuration: %s", strings.Join(fields, "; "))
+	}
+	return MCPConfig{App: configuration.App, Database: configuration.Database}, nil
+}
+
+func loadFile(path string, configuration *Config) error {
+	if path == "" {
+		return nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open config file: %w", err)
+	}
+	defer file.Close()
+	decoder := yaml.NewDecoder(io.LimitReader(file, 1<<20))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(configuration); err != nil {
+		return fmt.Errorf("decode config file: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return errors.New("decode config file: expected one YAML document")
+	}
+	return nil
 }
 
 func applyEnvironment(configuration *Config, lookup func(string) (string, bool)) error {

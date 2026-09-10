@@ -17,3 +17,5 @@ Current decisions:
 - [ADR 0001: Electron-style typed service bridge](0001-electron-style-service-bridge.md)
 - [ADR 0002: Vaadin Web Components](0002-vaadin-web-components.md)
 - [ADR 0003: Shared task core client library](0003-task-core-library.md)
+- [ADR 0004: JSON Schema task contract](0004-json-schema-task-contract.md)
+- [ADR 0005: Go stdio MCP server](0005-go-stdio-mcp-server.md)

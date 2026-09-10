@@ -1,10 +1,6 @@
-export type TaskClientErrorCode =
-  | "VALIDATION"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "INTERNAL"
-  | "SERVICE_UNAVAILABLE"
-  | "PROTOCOL_ERROR";
+import type { TaskClientErrorCode } from "./generated/task-api";
+
+export type { TaskClientErrorCode } from "./generated/task-api";
 
 export interface TaskClientErrorOptions {
   requestId?: string;

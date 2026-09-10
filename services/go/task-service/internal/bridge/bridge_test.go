@@ -90,9 +90,17 @@ func TestInvokeRejectsUnsupportedProtocolAndCanceledContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	canceled := dispatcher.Invoke(ctx, Request{ProtocolVersion: 1, RequestID: "request-2", Operation: OperationTasksList})
+	canceled := dispatcher.Invoke(ctx, Request{ProtocolVersion: 1, RequestID: "request-2", Operation: OperationTasksList, Payload: json.RawMessage(`{}`)})
 	if canceled.Error == nil || canceled.Error.Code != "INTERNAL" {
 		t.Fatalf("canceled response = %#v", canceled)
+	}
+}
+
+func TestInvokeRequiresTaskPayload(t *testing.T) {
+	dispatcher := newTestDispatcher(&fakeTaskService{})
+	response := dispatcher.Invoke(context.Background(), Request{ProtocolVersion: 1, RequestID: "request-1", Operation: OperationTasksList})
+	if response.Error == nil || response.Error.Code != "VALIDATION" || response.Error.FieldErrors["payload"] == "" {
+		t.Fatalf("Invoke() = %#v", response)
 	}
 }
 
