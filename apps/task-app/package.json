@@ -1,0 +1,47 @@
+{
+  "name": "task-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:remote": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "preview:remote": "vite preview --host 0.0.0.0",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-go-service-example/task-core-library": "0.1.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@vaadin/app-layout": "^25.2.10",
+    "@vaadin/button": "^25.2.10",
+    "@vaadin/grid": "^25.2.10",
+    "@vaadin/icon": "^25.2.10",
+    "@vaadin/icons": "^25.2.10",
+    "@vaadin/menu-bar": "^25.2.10",
+    "@vaadin/react-components": "^25.2.10",
+    "@vaadin/side-nav": "^25.2.10",
+    "@vaadin/text-field": "^25.2.10",
+    "@vaadin/vaadin-lumo-styles": "^25.2.10",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "jsdom": "^27.0.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.0.0"
+  }
+}

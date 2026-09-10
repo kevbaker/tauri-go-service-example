@@ -1,0 +1,16 @@
+node_modules/
+dist/
+target/
+
+.DS_Store
+.env
+.env.*
+!.env.example
+
+data/
+*.db
+*.db-shm
+*.db-wal
+
+apps/task-app/src-tauri/binaries/*
+!apps/task-app/src-tauri/binaries/README.md

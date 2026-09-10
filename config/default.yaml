@@ -1,0 +1,15 @@
+app:
+  environment: production
+  logLevel: info
+database:
+  path: ./data/tasks.db
+server:
+  mode: desktop
+  host: 127.0.0.1
+  port: 0
+  allowedOrigins: []
+  requestTimeout: 10s
+  shutdownTimeout: 5s
+ui:
+  appName: Tauri Go Tasks
+  pageSize: 25
