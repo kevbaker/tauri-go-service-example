@@ -1,0 +1,1 @@
+# tauri-go-service-example
