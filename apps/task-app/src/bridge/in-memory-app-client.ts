@@ -61,6 +61,18 @@ export function createInMemoryAppClient(): TaskCoreClient {
   let tasks = starterTasks.map(cloneTask);
 
   return {
+    config: {
+      async getPublic() {
+        return {
+          environment: "development",
+          ui: {
+            appName: "Tauri Go Tasks",
+            pageSize: 25,
+            refreshIntervalMs: 30_000,
+          },
+        };
+      },
+    },
     tasks: {
       async list() {
         return tasks.map(cloneTask);

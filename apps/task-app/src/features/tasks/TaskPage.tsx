@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@vaadin/react-components";
+import {
+  Button,
+  Dialog,
+  Icon,
+  MenuBar,
+  type MenuBarItem,
+} from "@vaadin/react-components";
 import {
   TaskClientError,
   type CreateTaskInput,
@@ -14,9 +20,25 @@ import "./tasks.css";
 interface TaskPageProps {
   client: TaskCoreClient;
   backendLabel?: string;
+  refreshIntervalMs?: number;
 }
 
-const TASK_REFRESH_INTERVAL_MS = 5_000;
+const DEFAULT_REFRESH_INTERVAL_MS = 30_000;
+const applicationMenuItems: MenuBarItem[] = [
+  {
+    component: (
+      <span className="application-menu__trigger">
+        <Icon icon="vaadin:menu" aria-hidden="true" />
+        <span className="visually-hidden">Menu</span>
+      </span>
+    ),
+    children: [
+      { text: "About" },
+      { text: "Release notes" },
+      { text: "Help" },
+    ],
+  },
+];
 
 function errorMessage(error: unknown): string {
   if (error instanceof TaskClientError) {
@@ -29,9 +51,11 @@ function errorMessage(error: unknown): string {
 export function TaskPage({
   client,
   backendLabel = "Injected task client",
+  refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS,
 }: TaskPageProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskFormOpened, setTaskFormOpened] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -77,13 +101,13 @@ export function TaskPage({
     void refreshTasks(true);
     const interval = window.setInterval(() => {
       void refreshTasks();
-    }, TASK_REFRESH_INTERVAL_MS);
+    }, refreshIntervalMs);
 
     return () => {
       active.current = false;
       window.clearInterval(interval);
     };
-  }, [refreshTasks]);
+  }, [refreshIntervalMs, refreshTasks]);
 
   async function handleSubmit(input: CreateTaskInput) {
     dataVersion.current += 1;
@@ -97,7 +121,6 @@ export function TaskPage({
         setTasks((current) =>
           current.map((task) => (task.id === updated.id ? updated : task)),
         );
-        setEditingTask(null);
       } else {
         const created = await client.tasks.create(input);
         dataVersion.current += 1;
@@ -106,6 +129,8 @@ export function TaskPage({
           ...current.filter((task) => task.id !== created.id),
         ]);
       }
+      setTaskFormOpened(false);
+      setEditingTask(null);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -145,12 +170,30 @@ export function TaskPage({
       await client.tasks.delete(task.id);
       dataVersion.current += 1;
       setTasks((current) => current.filter((item) => item.id !== task.id));
-      if (editingTask?.id === task.id) setEditingTask(null);
+      if (editingTask?.id === task.id) {
+        setTaskFormOpened(false);
+        setEditingTask(null);
+      }
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
       setBusyTaskId(null);
     }
+  }
+
+  function openCreateTask() {
+    setEditingTask(null);
+    setTaskFormOpened(true);
+  }
+
+  function openEditTask(task: Task) {
+    setEditingTask(task);
+    setTaskFormOpened(true);
+  }
+
+  function closeTaskForm() {
+    setTaskFormOpened(false);
+    setEditingTask(null);
   }
 
   return (
@@ -163,8 +206,15 @@ export function TaskPage({
             A small CRUD surface for proving the typed service bridge.
           </p>
         </div>
-        <div className="preview-badge" title="Tasks are persisted by the Go service">
-          {backendLabel}
+        <div className="app-header__actions">
+          <MenuBar
+            aria-label="Application menu"
+            items={applicationMenuItems}
+            theme="tertiary"
+          />
+          <div className="preview-badge" title="Tasks are persisted by the Go service">
+            {backendLabel}
+          </div>
         </div>
       </header>
 
@@ -192,57 +242,67 @@ export function TaskPage({
         </div>
       ) : null}
 
-      <section className="workspace">
-        <div className="task-form-panel">
+      <section className="task-list-panel" aria-labelledby="task-list-heading">
+        <div className="list-heading">
+          <div>
+            <p className="eyebrow">Current work</p>
+            <h2 id="task-list-heading">Task list</h2>
+          </div>
+          <div className="list-heading__actions">
+            <span>{tasks.length} items</span>
+            <Button
+              theme="tertiary small"
+              disabled={loading || refreshing}
+              onClick={() => void refreshTasks()}
+            >
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Button>
+            <Button theme="primary" onClick={openCreateTask}>
+              Create task
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="empty-state">Loading tasks…</p>
+        ) : tasks.length === 0 ? (
+          <div className="empty-state">
+            <h3>No tasks yet</h3>
+            <p>Create the first task to get started.</p>
+          </div>
+        ) : (
+          <div className="task-list">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                busy={busyTaskId === task.id}
+                onEdit={openEditTask}
+                onDelete={handleDelete}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Dialog
+        opened={taskFormOpened}
+        theme="task-sheet"
+        noCloseOnEsc={saving}
+        noCloseOnOutsideClick={saving}
+        aria-label={editingTask ? "Edit task" : "Create task"}
+        onClosed={closeTaskForm}
+      >
+        {taskFormOpened ? (
           <TaskForm
             editingTask={editingTask}
             busy={saving}
-            onCancel={() => setEditingTask(null)}
+            onCancel={closeTaskForm}
             onSubmit={handleSubmit}
           />
-        </div>
-
-        <section className="task-list-panel" aria-labelledby="task-list-heading">
-          <div className="list-heading">
-            <div>
-              <p className="eyebrow">Current work</p>
-              <h2 id="task-list-heading">Task list</h2>
-            </div>
-            <div className="list-heading__actions">
-              <span>{tasks.length} items</span>
-              <Button
-                theme="tertiary small"
-                disabled={loading || refreshing}
-                onClick={() => void refreshTasks()}
-              >
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </Button>
-            </div>
-          </div>
-
-          {loading ? (
-            <p className="empty-state">Loading tasks…</p>
-          ) : tasks.length === 0 ? (
-            <div className="empty-state">
-              <h3>No tasks yet</h3>
-              <p>Add the first task using the form above.</p>
-            </div>
-          ) : (
-            <div className="task-list">
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  busy={busyTaskId === task.id}
-                  onEdit={setEditingTask}
-                  onDelete={handleDelete}
-                  onStatusChange={handleStatusChange}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      </section>
+        ) : null}
+      </Dialog>
     </main>
   );
 }

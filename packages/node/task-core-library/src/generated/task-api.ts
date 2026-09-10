@@ -5,12 +5,23 @@
  */
 export type TaskAPIContract = TaskBridgeRequest | TaskBridgeResponse;
 export type TaskBridgeRequest =
-  ListTasksRequest | GetTaskRequest | CreateTaskRequest | UpdateTaskRequest | DeleteTaskRequest;
+  | GetPublicConfigRequest
+  | ListTasksRequest
+  | GetTaskRequest
+  | CreateTaskRequest
+  | UpdateTaskRequest
+  | DeleteTaskRequest;
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskBridgeResponse = SuccessfulTaskResponse | FailedTaskResponse;
 export type TaskClientErrorCode =
   "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "INTERNAL" | "SERVICE_UNAVAILABLE" | "PROTOCOL_ERROR";
 
+export interface GetPublicConfigRequest {
+  protocolVersion: 1;
+  requestId: string;
+  operation: "config.getPublic";
+  payload: {};
+}
 export interface ListTasksRequest {
   protocolVersion: 1;
   requestId: string;
@@ -67,7 +78,15 @@ export interface SuccessfulTaskResponse {
   protocolVersion: 1;
   requestId: string;
   ok: true;
-  data: Task | Task[] | {};
+  data: PublicConfig | Task | Task[] | {};
+}
+export interface PublicConfig {
+  environment: string;
+  ui: {
+    appName: string;
+    pageSize: number;
+    refreshIntervalMs: number;
+  };
 }
 export interface Task {
   id: string;

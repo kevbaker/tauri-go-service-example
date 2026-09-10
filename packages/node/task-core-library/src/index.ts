@@ -8,6 +8,8 @@ export {
 export type {
   CreateTaskInput,
   ListTasksQuery,
+  PublicConfig,
+  PublicConfigClient,
   Task,
   TaskBackendTransport,
   TaskBridgeRequest,

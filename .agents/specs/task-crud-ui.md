@@ -11,10 +11,10 @@ Provide the smallest useful UI that exercises create, read, update, status-chang
 ## Current behavior
 
 - Show total, open, and completed task counts.
-- List tasks as cards with title, optional description, status, and actions.
-- Create a task with title, optional description, and status.
-- Edit the same fields using the shared form.
-- Change status directly from a task card.
+- List tasks as compact, single-line cards with a title, description tooltip, status, and actions.
+- Create a title-only task; new tasks start as Pending.
+- Edit the title, optional description, and status using the shared form.
+- Change status from the edit form or cycle Pending, In progress, and Done directly from a task card's status pill.
 - Confirm before deletion.
 - Display validation and normalized application errors without exposing transport details.
 - Clearly label the current adapter as an in-memory preview that resets on reload.

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kbaker/tauri-go-service-example/services/go/task-service/internal/config"
 	"github.com/kbaker/tauri-go-service-example/services/go/task-service/internal/task"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -54,14 +55,21 @@ func TestGoWireValuesSatisfyTaskContract(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	configuration := config.Defaults()
+	configuration.Token = "contract-test"
+	if err := configuration.Validate(); err != nil {
+		t.Fatalf("validate default configuration: %v", err)
+	}
 
 	values := []any{
+		Request{ProtocolVersion: 1, RequestID: "request-config", Operation: OperationConfigGetPublic, Payload: json.RawMessage(`{}`)},
 		Request{ProtocolVersion: 1, RequestID: "request-list", Operation: OperationTasksList, Payload: json.RawMessage(`{"status":"in_progress","limit":25,"offset":0}`)},
 		Request{ProtocolVersion: 1, RequestID: "request-get", Operation: OperationTasksGet, Payload: json.RawMessage(`{"id":"task-1"}`)},
 		Request{ProtocolVersion: 1, RequestID: "request-create", Operation: OperationTasksCreate, Payload: json.RawMessage(`{"title":"Share task types","description":null}`)},
 		Request{ProtocolVersion: 1, RequestID: "request-update", Operation: OperationTasksUpdate, Payload: json.RawMessage(`{"id":"task-1","input":{"description":null}}`)},
 		Request{ProtocolVersion: 1, RequestID: "request-delete", Operation: OperationTasksDelete, Payload: json.RawMessage(`{"id":"task-1"}`)},
 		Response{ProtocolVersion: 1, RequestID: "request-list", OK: true, Data: []task.Task{value}},
+		Response{ProtocolVersion: 1, RequestID: "request-config", OK: true, Data: configuration.Public()},
 		Response{ProtocolVersion: 1, RequestID: "request-get", OK: true, Data: value},
 		Response{ProtocolVersion: 1, RequestID: "request-delete", OK: true, Data: struct{}{}},
 		Response{ProtocolVersion: 1, RequestID: "request-error", Error: &ApplicationError{Code: "VALIDATION", Message: "The request is invalid", FieldErrors: map[string]string{"title": "Title is required"}}},

@@ -1,14 +1,20 @@
-import { Button, Select } from "@vaadin/react-components";
+import "@vaadin/icons/vaadin-iconset.js";
+import { Button, Icon } from "@vaadin/react-components";
 import type {
   Task,
   TaskStatus,
 } from "@tauri-go-service-example/task-core-library";
 
 const statusItems = [
-  { label: "To do", value: "todo" },
+  { label: "Pending", value: "todo" },
   { label: "In progress", value: "in_progress" },
   { label: "Done", value: "done" },
-];
+] as const;
+
+function nextStatus(status: TaskStatus): TaskStatus {
+  const currentIndex = statusItems.findIndex((item) => item.value === status);
+  return statusItems[(currentIndex + 1) % statusItems.length]?.value ?? "todo";
+}
 
 interface TaskCardProps {
   task: Task;
@@ -25,40 +31,44 @@ export function TaskCard({
   onEdit,
   onStatusChange,
 }: TaskCardProps) {
+  const status = statusItems.find((item) => item.value === task.status);
+  const next = statusItems.find((item) => item.value === nextStatus(task.status));
+
   return (
     <article className="task-card">
-      <div className="task-card__body">
-        <div className="task-card__title-row">
-          <h3>{task.title}</h3>
-          <span className="status-pill" data-status={task.status}>
-            {statusItems.find((item) => item.value === task.status)?.label}
-          </span>
-        </div>
-        {task.description ? <p>{task.description}</p> : null}
+      <div className="task-card__body" title={task.description || undefined}>
+        <h3>{task.title}</h3>
       </div>
 
-      <div className="task-card__controls">
-        <Select
-          label="Status"
-          value={task.status}
-          items={statusItems}
+      <div className="task-card__actions">
+        <Button
+          className="status-pill"
+          data-status={task.status}
+          theme="tertiary small"
           disabled={busy}
-          onValueChanged={(event) =>
-            void onStatusChange(task, event.detail.value as TaskStatus)
-          }
-        />
-        <div className="task-card__actions">
-          <Button theme="tertiary" disabled={busy} onClick={() => onEdit(task)}>
-            Edit
-          </Button>
-          <Button
-            theme="tertiary error"
-            disabled={busy}
-            onClick={() => void onDelete(task)}
-          >
-            Delete
-          </Button>
-        </div>
+          aria-label={`Status: ${status?.label}. Change to ${next?.label}`}
+          onClick={() => void onStatusChange(task, nextStatus(task.status))}
+        >
+          {status?.label}
+        </Button>
+        <Button
+          className="task-card__icon-button"
+          theme="tertiary"
+          disabled={busy}
+          aria-label={`Edit ${task.title}`}
+          onClick={() => onEdit(task)}
+        >
+          <Icon icon="vaadin:edit" />
+        </Button>
+        <Button
+          className="task-card__icon-button"
+          theme="tertiary error"
+          disabled={busy}
+          aria-label={`Delete ${task.title}`}
+          onClick={() => void onDelete(task)}
+        >
+          <Icon icon="vaadin:trash" />
+        </Button>
       </div>
     </article>
   );

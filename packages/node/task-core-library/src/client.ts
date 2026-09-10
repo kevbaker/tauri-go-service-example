@@ -3,6 +3,7 @@ import {
   taskStatuses,
   type CreateTaskInput,
   type ListTasksQuery,
+  type PublicConfig,
   type Task,
   type TaskBackendTransport,
   type TaskBridgeRequest,
@@ -74,6 +75,35 @@ function parseTaskList(value: unknown, requestId: string): Task[] {
     throw protocolError("The task service returned an invalid task list.", requestId);
   }
   return value.map((item) => parseTask(item, requestId));
+}
+
+function parsePublicConfig(value: unknown, requestId: string): PublicConfig {
+  if (
+    !isRecord(value) ||
+    typeof value.environment !== "string" ||
+    !isRecord(value.ui)
+  ) {
+    throw protocolError("The task service returned invalid public configuration.", requestId);
+  }
+  const { appName, pageSize, refreshIntervalMs } = value.ui;
+  if (
+    typeof appName !== "string" ||
+    typeof pageSize !== "number" ||
+    typeof refreshIntervalMs !== "number" ||
+    !Number.isInteger(pageSize) ||
+    !Number.isInteger(refreshIntervalMs) ||
+    refreshIntervalMs < 1_000
+  ) {
+    throw protocolError("The task service returned invalid public configuration.", requestId);
+  }
+  return {
+    environment: value.environment,
+    ui: {
+      appName,
+      pageSize,
+      refreshIntervalMs,
+    },
+  };
 }
 
 function parseFieldErrors(value: unknown): Readonly<Record<string, string>> | undefined {
@@ -153,6 +183,19 @@ export function createTaskCoreClient(
   }
 
   return {
+    config: {
+      getPublic() {
+        return invoke(
+          {
+            protocolVersion: taskProtocolVersion,
+            requestId: createRequestId(),
+            operation: "config.getPublic",
+            payload: {},
+          },
+          parsePublicConfig,
+        );
+      },
+    },
     tasks: {
       list(query: ListTasksQuery = {}) {
         return invoke(

@@ -18,18 +18,28 @@ const task: Task = {
 };
 
 describe("createTaskCoreClient", () => {
-  it("maps the five CRUD methods to the versioned backend operations", async () => {
+  it("maps public config and the five CRUD methods to versioned backend operations", async () => {
+    const publicConfig = {
+      environment: "test",
+      ui: { appName: "Tasks", pageSize: 25, refreshIntervalMs: 30_000 },
+    };
     const invoke = vi.fn<TaskBackendTransport["invoke"]>(async (request) => ({
       protocolVersion: taskProtocolVersion,
       requestId: request.requestId,
       ok: true,
-      data: request.operation === "tasks.list" ? [task] : task,
+      data:
+        request.operation === "config.getPublic"
+          ? publicConfig
+          : request.operation === "tasks.list"
+            ? [task]
+            : task,
     }));
     const client = createTaskCoreClient(
       { invoke },
       { createRequestId: () => "request-1" },
     );
 
+    await expect(client.config.getPublic()).resolves.toEqual(publicConfig);
     await expect(client.tasks.list({ status: "todo" })).resolves.toEqual([task]);
     await expect(client.tasks.get("task-1")).resolves.toEqual(task);
     await expect(client.tasks.create({ title: "Create" })).resolves.toEqual(task);
@@ -39,6 +49,12 @@ describe("createTaskCoreClient", () => {
     await expect(client.tasks.delete("task-1")).resolves.toBeUndefined();
 
     expect(invoke.mock.calls.map(([request]) => request)).toEqual([
+      {
+        protocolVersion: 1,
+        requestId: "request-1",
+        operation: "config.getPublic",
+        payload: {},
+      },
       {
         protocolVersion: 1,
         requestId: "request-1",

@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -13,15 +13,13 @@ import { TaskPage } from "./TaskPage";
 vi.mock("@vaadin/react-components", () => ({
   Button: ({
     children,
-    disabled,
-    onClick,
+    theme: _theme,
+    ...props
   }: {
     children: ReactNode;
-    disabled?: boolean;
-    onClick?(): void;
     theme?: string;
-  }) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
+  } & ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
       {children}
     </button>
   ),
@@ -103,6 +101,48 @@ vi.mock("@vaadin/react-components", () => ({
       </select>
     </label>
   ),
+  Dialog: ({
+    children,
+    opened,
+    "aria-label": ariaLabel,
+  }: {
+    children?: ReactNode;
+    opened?: boolean;
+    "aria-label"?: string;
+    noCloseOnEsc?: boolean;
+    noCloseOnOutsideClick?: boolean;
+    onClosed?(): void;
+    theme?: string;
+  }) =>
+    opened ? (
+      <div role="dialog" aria-label={ariaLabel}>
+        {children}
+      </div>
+    ) : null,
+  MenuBar: ({
+    items,
+    "aria-label": ariaLabel,
+  }: {
+    items?: {
+      component?: ReactNode;
+      text?: string;
+      children?: { text?: string }[];
+    }[];
+    "aria-label"?: string;
+    theme?: string;
+  }) => (
+    <nav aria-label={ariaLabel}>
+      {items?.map((item) => (
+        <div key={item.text ?? "application-menu"}>
+          <button type="button">{item.component ?? item.text}</button>
+          {item.children?.map((child) => (
+            <span key={child.text}>{child.text}</span>
+          ))}
+        </div>
+      ))}
+    </nav>
+  ),
+  Icon: ({ icon }: { icon?: string }) => <span aria-hidden="true">{icon}</span>,
 }));
 
 const task: Task = {
@@ -118,6 +158,12 @@ function fakeClient(
   overrides: Partial<TaskCoreClient["tasks"]> = {},
 ): TaskCoreClient {
   return {
+    config: {
+      getPublic: vi.fn().mockResolvedValue({
+        environment: "test",
+        ui: { appName: "Tasks", pageSize: 25, refreshIntervalMs: 30_000 },
+      }),
+    },
     tasks: {
       list: vi.fn().mockResolvedValue([task]),
       get: vi.fn(),
@@ -158,7 +204,9 @@ describe("TaskPage", () => {
       });
     const clearInterval = vi.spyOn(window, "clearInterval").mockImplementation(() => {});
 
-    const { unmount } = render(<TaskPage client={client} />);
+    const { unmount } = render(
+      <TaskPage client={client} refreshIntervalMs={5_000} />,
+    );
     await screen.findByText(task.title);
 
     await userEvent.click(screen.getByText("Refresh"));
@@ -179,35 +227,72 @@ describe("TaskPage", () => {
   });
 
   it("creates a task with values from the form", async () => {
-    const created = { ...task, id: "task-2", title: "New task", status: "done" as const };
+    const created = { ...task, id: "task-2", title: "New task" };
     const client = fakeClient({ create: vi.fn().mockResolvedValue(created) });
     render(<TaskPage client={client} />);
     await screen.findByText(task.title);
 
-    await userEvent.type(screen.getByLabelText("Title"), "New task");
-    const [createStatus] = screen.getAllByLabelText("Status");
-    if (!createStatus) throw new Error("Create status control was not rendered");
-    await userEvent.selectOptions(createStatus, "done");
-    await userEvent.type(
-      screen.getByLabelText("Description"),
-      "Created in a component test",
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+    const dialog = screen.getByRole("dialog", { name: "Create task" });
+
+    await userEvent.type(within(dialog).getByLabelText("Title"), "New task");
+    expect(within(dialog).queryByLabelText("Status")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Description")).not.toBeInTheDocument();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Create task" }),
     );
-    await userEvent.click(screen.getByText("Add task"));
 
     await waitFor(() =>
       expect(client.tasks.create).toHaveBeenCalledWith({
         title: "New task",
-        description: "Created in a component test",
-        status: "done",
+        description: "",
+        status: "todo",
       }),
     );
     expect(screen.getByRole("heading", { level: 3, name: "New task" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Create task" })).not.toBeInTheDocument();
+  });
+
+  it("opens the same task sheet for editing", async () => {
+    render(<TaskPage client={fakeClient()} />);
+    await screen.findByText(task.title);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Edit ${task.title}` }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit task" });
+
+    expect(within(dialog).getByLabelText("Title")).toHaveValue(task.title);
+    expect(within(dialog).getByLabelText("Status")).toHaveValue("todo");
+    expect(within(dialog).getByLabelText("Description")).toHaveValue(
+      task.description,
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    ).toBeInTheDocument();
+  });
+
+  it("provides an application menu with an About item", async () => {
+    render(<TaskPage client={fakeClient()} />);
+    await screen.findByText(task.title);
+
+    expect(screen.getByRole("button", { name: "Menu" })).toBeInTheDocument();
+    expect(screen.getByText("About")).toBeInTheDocument();
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.getByText("Help")).toBeInTheDocument();
   });
 
   it("updates status and deletes only after confirmation", async () => {
-    const updated = { ...task, status: "done" as const };
+    const inProgress = { ...task, status: "in_progress" as const };
+    const done = { ...task, status: "done" as const };
+    const pendingAgain = { ...task, status: "todo" as const };
     const client = fakeClient({
-      update: vi.fn().mockResolvedValue(updated),
+      update: vi
+        .fn()
+        .mockResolvedValueOnce(inProgress)
+        .mockResolvedValueOnce(done)
+        .mockResolvedValueOnce(pendingAgain),
       delete: vi.fn().mockResolvedValue(undefined),
     });
     const confirm = vi.spyOn(window, "confirm");
@@ -215,17 +300,46 @@ describe("TaskPage", () => {
     await screen.findByText(task.title);
 
     const card = container.querySelector(".task-card")!;
-    await userEvent.selectOptions(within(card as HTMLElement).getByLabelText("Status"), "done");
+    const description = task.description;
+    if (!description) throw new Error("Task fixture requires a description");
+    expect(within(card as HTMLElement).queryByText(description)).not.toBeInTheDocument();
+    expect(within(card as HTMLElement).getByTitle(description)).toBeInTheDocument();
+    expect(within(card as HTMLElement).queryByLabelText("Status")).not.toBeInTheDocument();
+    await userEvent.click(
+      within(card as HTMLElement).getByRole("button", {
+        name: "Status: Pending. Change to In progress",
+      }),
+    );
     await waitFor(() =>
-      expect(client.tasks.update).toHaveBeenCalledWith(task.id, { status: "done" }),
+      expect(client.tasks.update).toHaveBeenCalledWith(task.id, { status: "in_progress" }),
+    );
+    await userEvent.click(
+      within(card as HTMLElement).getByRole("button", {
+        name: "Status: In progress. Change to Done",
+      }),
+    );
+    await waitFor(() =>
+      expect(client.tasks.update).toHaveBeenLastCalledWith(task.id, { status: "done" }),
+    );
+    await userEvent.click(
+      within(card as HTMLElement).getByRole("button", {
+        name: "Status: Done. Change to Pending",
+      }),
+    );
+    await waitFor(() =>
+      expect(client.tasks.update).toHaveBeenLastCalledWith(task.id, { status: "todo" }),
     );
 
     confirm.mockReturnValueOnce(false);
-    await userEvent.click(within(card as HTMLElement).getByText("Delete"));
+    await userEvent.click(
+      within(card as HTMLElement).getByRole("button", { name: `Delete ${task.title}` }),
+    );
     expect(client.tasks.delete).not.toHaveBeenCalled();
 
     confirm.mockReturnValueOnce(true);
-    await userEvent.click(within(card as HTMLElement).getByText("Delete"));
+    await userEvent.click(
+      within(card as HTMLElement).getByRole("button", { name: `Delete ${task.title}` }),
+    );
     await waitFor(() => expect(client.tasks.delete).toHaveBeenCalledWith(task.id));
     expect(screen.queryByText(task.title)).not.toBeInTheDocument();
   });

@@ -241,7 +241,12 @@ fn validate_request(request: &ServiceRequest) -> Result<(), String> {
     }
     if !matches!(
         request.operation.as_str(),
-        "tasks.list" | "tasks.get" | "tasks.create" | "tasks.update" | "tasks.delete"
+        "config.getPublic"
+            | "tasks.list"
+            | "tasks.get"
+            | "tasks.create"
+            | "tasks.update"
+            | "tasks.delete"
     ) {
         return Err("PROTOCOL_ERROR: operation is not allowed".to_owned());
     }
@@ -282,7 +287,8 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_task_operations() {
+    fn accepts_only_application_operations() {
+        assert!(validate_request(&request("config.getPublic")).is_ok());
         assert!(validate_request(&request("tasks.create")).is_ok());
         assert!(validate_request(&request("system.shell")).is_err());
     }

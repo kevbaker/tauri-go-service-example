@@ -1,6 +1,7 @@
 import type {
   CreateTaskInput,
   ListTasksQuery,
+  PublicConfig,
   Task,
   TaskBridgeRequest,
   TaskStatus,
@@ -15,6 +16,8 @@ export type {
   FailedTaskResponse,
   GetTaskRequest,
   ListTasksQuery,
+  GetPublicConfigRequest,
+  PublicConfig,
   ListTasksRequest,
   SuccessfulTaskResponse,
   Task,
@@ -62,6 +65,11 @@ export interface TaskCrudClient {
   delete(id: string): Promise<void>;
 }
 
+export interface PublicConfigClient {
+  getPublic(): Promise<PublicConfig>;
+}
+
 export interface TaskCoreClient {
+  readonly config: PublicConfigClient;
   readonly tasks: TaskCrudClient;
 }

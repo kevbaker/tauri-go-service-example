@@ -43,16 +43,19 @@ type ServerConfig struct {
 }
 
 type UIConfig struct {
-	AppName  string `yaml:"appName" json:"appName"`
-	PageSize int    `yaml:"pageSize" json:"pageSize"`
+    AppName          string        `yaml:"appName" json:"appName"`
+    PageSize         int           `yaml:"pageSize" json:"pageSize"`
+    RefreshInterval  time.Duration `yaml:"-" json:"-"`
+    RefreshIntervalS string        `yaml:"refreshInterval" json:"refreshInterval"`
 }
 
 type PublicConfig struct {
 	Environment string `json:"environment"`
-	UI          struct {
-		AppName  string `json:"appName"`
-		PageSize int    `json:"pageSize"`
-	} `json:"ui"`
+    UI          struct {
+        AppName           string `json:"appName"`
+        PageSize          int    `json:"pageSize"`
+        RefreshIntervalMS int64  `json:"refreshIntervalMs"`
+    } `json:"ui"`
 }
 
 type Overrides struct {
@@ -85,7 +88,7 @@ func Defaults() Config {
 			RequestTimeoutS:  "10s",
 			ShutdownTimeoutS: "5s",
 		},
-		UI: UIConfig{AppName: "Tauri Go Tasks", PageSize: 25},
+        UI: UIConfig{AppName: "Tauri Go Tasks", PageSize: 25, RefreshIntervalS: "30s"},
 	}
 }
 
@@ -185,8 +188,9 @@ func applyEnvironment(configuration *Config, lookup func(string) (string, bool))
 		{"TGS_SERVER_MODE", &configuration.Server.Mode},
 		{"TGS_SERVER_HOST", &configuration.Server.Host},
 		{"TGS_SERVER_REQUEST_TIMEOUT", &configuration.Server.RequestTimeoutS},
-		{"TGS_SERVER_SHUTDOWN_TIMEOUT", &configuration.Server.ShutdownTimeoutS},
-		{"TGS_UI_APP_NAME", &configuration.UI.AppName},
+        {"TGS_SERVER_SHUTDOWN_TIMEOUT", &configuration.Server.ShutdownTimeoutS},
+        {"TGS_UI_APP_NAME", &configuration.UI.AppName},
+        {"TGS_UI_REFRESH_INTERVAL", &configuration.UI.RefreshIntervalS},
 	}
 	for _, value := range stringValues {
 		if raw, ok := lookup(value.key); ok {
@@ -284,9 +288,13 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.UI.AppName) == "" {
 		fields = append(fields, "ui.appName is required")
 	}
-	if c.UI.PageSize < 1 || c.UI.PageSize > 100 {
-		fields = append(fields, "ui.pageSize must be between 1 and 100")
-	}
+    if c.UI.PageSize < 1 || c.UI.PageSize > 100 {
+        fields = append(fields, "ui.pageSize must be between 1 and 100")
+    }
+    c.UI.RefreshInterval, err = time.ParseDuration(c.UI.RefreshIntervalS)
+    if err != nil || c.UI.RefreshInterval < time.Second {
+        fields = append(fields, "ui.refreshInterval must be at least one second")
+    }
 	if len(fields) > 0 {
 		return fmt.Errorf("invalid configuration: %s", strings.Join(fields, "; "))
 	}
@@ -295,8 +303,9 @@ func (c *Config) Validate() error {
 
 func (c Config) Public() PublicConfig {
 	public := PublicConfig{Environment: c.App.Environment}
-	public.UI.AppName = c.UI.AppName
-	public.UI.PageSize = c.UI.PageSize
+    public.UI.AppName = c.UI.AppName
+    public.UI.PageSize = c.UI.PageSize
+    public.UI.RefreshIntervalMS = c.UI.RefreshInterval.Milliseconds()
 	return public
 }
 

@@ -12,7 +12,7 @@ import type {
 } from "@tauri-go-service-example/task-core-library";
 
 const statusItems = [
-  { label: "To do", value: "todo" },
+  { label: "Pending", value: "todo" },
   { label: "In progress", value: "in_progress" },
   { label: "Done", value: "done" },
 ];
@@ -65,8 +65,8 @@ export function TaskForm({
     <form ref={formRef} className="task-form" onSubmit={handleSubmit}>
       <div className="task-form__heading">
         <div>
-          <p className="eyebrow">{editingTask ? "Edit task" : "New task"}</p>
-          <h2>{editingTask ? editingTask.title : "What needs doing?"}</h2>
+          <p className="eyebrow">{editingTask ? "Update task" : "New task"}</p>
+          <h2>{editingTask ? editingTask.title : "Create task"}</h2>
         </div>
         {editingTask ? (
           <Button theme="tertiary" onClick={onCancel} disabled={busy}>
@@ -85,19 +85,23 @@ export function TaskForm({
           errorMessage={titleError}
           onValueChanged={(event) => setTitle(event.detail.value)}
         />
-        <Select
-          label="Status"
-          value={status}
-          items={statusItems}
-          onValueChanged={(event) => setStatus(event.detail.value as TaskStatus)}
-        />
-        <TextArea
-          className="task-form__description"
-          label="Description"
-          value={description}
-          maxlength={500}
-          onValueChanged={(event) => setDescription(event.detail.value)}
-        />
+        {editingTask ? (
+          <Select
+            label="Status"
+            value={status}
+            items={statusItems}
+            onValueChanged={(event) => setStatus(event.detail.value as TaskStatus)}
+          />
+        ) : null}
+        {editingTask ? (
+          <TextArea
+            className="task-form__description"
+            label="Description"
+            value={description}
+            maxlength={500}
+            onValueChanged={(event) => setDescription(event.detail.value)}
+          />
+        ) : null}
       </div>
 
       <div className="task-form__actions">
@@ -106,7 +110,7 @@ export function TaskForm({
           disabled={busy}
           onClick={() => formRef.current?.requestSubmit()}
         >
-          {busy ? "Saving…" : editingTask ? "Save changes" : "Add task"}
+          {busy ? "Saving…" : editingTask ? "Save changes" : "Create task"}
         </Button>
       </div>
     </form>

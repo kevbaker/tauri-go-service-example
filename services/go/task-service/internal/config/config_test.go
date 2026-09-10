@@ -31,8 +31,9 @@ ui:
 		t.Fatal(err)
 	}
 	environment := map[string]string{
-		"TGS_SERVICE_TOKEN": "secret",
-		"TGS_UI_PAGE_SIZE":  "20",
+		"TGS_SERVICE_TOKEN":      "secret",
+		"TGS_UI_PAGE_SIZE":       "20",
+		"TGS_UI_REFRESH_INTERVAL": "45s",
 	}
 	overridePath := "override.db"
 	configuration, err := Load(path, func(key string) (string, bool) { value, ok := environment[key]; return value, ok }, Overrides{DatabasePath: &overridePath})
@@ -43,7 +44,7 @@ ui:
 		t.Fatalf("Load() = %#v", configuration)
 	}
 	public := configuration.Public()
-	if public.UI.AppName != "File Name" || strings.Contains(strings.TrimSpace(public.Environment), "secret") {
+	if public.UI.AppName != "File Name" || public.UI.RefreshIntervalMS != 45_000 || strings.Contains(strings.TrimSpace(public.Environment), "secret") {
 		t.Fatalf("Public() = %#v", public)
 	}
 	encoded, err := json.Marshal(public)
@@ -96,6 +97,15 @@ func TestLoadRejectsInvalidEnvironmentNumbers(t *testing.T) {
 	}, Overrides{})
 	if err == nil || !strings.Contains(err.Error(), "TGS_SERVER_PORT") {
 		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+func TestValidateRejectsTooFrequentUIRefresh(t *testing.T) {
+	configuration := Defaults()
+	configuration.Token = "secret"
+	configuration.UI.RefreshIntervalS = "500ms"
+	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "ui.refreshInterval") {
+		t.Fatalf("Validate() error = %v", err)
 	}
 }
 
